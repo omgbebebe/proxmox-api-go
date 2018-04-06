@@ -44,7 +44,7 @@ func (config ConfigQemu) CreateVm(vmr *VmRef, client *Client) (err error) {
 		"cores":       strconv.Itoa(config.QemuCores),
 		"cpu":         "host",
 		"memory":      strconv.Itoa(config.Memory),
-		"net0":        network,
+//		"net0":        network,
 		"description": config.Description,
 	}
 
@@ -95,7 +95,7 @@ func (config ConfigQemu) UpdateConfig(vmr *VmRef, client *Client) (err error) {
 		"sockets":     strconv.Itoa(config.QemuSockets),
 		"cores":       strconv.Itoa(config.QemuCores),
 		"memory":      strconv.Itoa(config.Memory),
-		"net0":        network,
+//		"net0":        network,
 		"description": config.Description,
 	}
 	_, err = client.SetVmConfig(vmr, configParams)
@@ -113,7 +113,7 @@ func NewConfigQemuFromJson(io io.Reader) (config *ConfigQemu, err error) {
 	return
 }
 
-var rxStorage = regexp.MustCompile("(.*?):.*?,size=(\\d+)G")
+var rxStorage = regexp.MustCompile("(.*?):.*?,size=(\\d+)G|M")
 var rxIso = regexp.MustCompile("(.*?),media")
 var rxNetwork = regexp.MustCompile("(.*?)=.*?,bridge=([^,]+)(?:,tag=)?(.*)")
 
@@ -171,14 +171,16 @@ func NewConfigQemuFromApi(vmr *VmRef, client *Client) (config *ConfigQemu, err e
 	}
 
 	storageMatch := rxStorage.FindStringSubmatch(vmConfig["virtio0"].(string))
-	config.Storage = storageMatch[1]
-	config.DiskSize, _ = strconv.ParseFloat(storageMatch[2], 64)
+    if storageMatch != nil {
+		config.Storage = storageMatch[1]
+		config.DiskSize, _ = strconv.ParseFloat(storageMatch[2], 64)
+    }
 
 	if vmConfig["ide2"] != nil {
 		isoMatch := rxIso.FindStringSubmatch(vmConfig["ide2"].(string))
 		config.QemuIso = isoMatch[1]
 	}
-
+/*
 	if vmConfig["net0"] == nil {
 		return nil, errors.New("net0 (required) not found in current config")
 	}
@@ -189,7 +191,7 @@ func NewConfigQemuFromApi(vmr *VmRef, client *Client) (config *ConfigQemu, err e
 	if netMatch[3] != "" {
 		config.QemuVlanTag, _ = strconv.Atoi(netMatch[3])
 	}
-
+*/
 	return
 }
 
@@ -218,11 +220,11 @@ func SshForwardUsernet(vmr *VmRef, client *Client) (sshPort string, err error) {
 		return "", errors.New("VM must be running first")
 	}
 	sshPort = strconv.Itoa(vmr.VmId() + 22000)
-	_, err = client.MonitorCmd(vmr, "netdev_add user,id=net1,hostfwd=tcp::"+sshPort+"-:22")
+	_, err = client.MonitorCmd(vmr, "netdev_add user,id=net0,hostfwd=tcp::"+sshPort+"-:22")
 	if err != nil {
 		return "", err
 	}
-	_, err = client.MonitorCmd(vmr, "device_add virtio-net-pci,id=net1,netdev=net1,addr=0x13")
+	_, err = client.MonitorCmd(vmr, "device_add virtio-net-pci,id=net0,netdev=net0,addr=0x13")
 	if err != nil {
 		return "", err
 	}
@@ -239,11 +241,11 @@ func RemoveSshForwardUsernet(vmr *VmRef, client *Client) (err error) {
 	if vmState["status"] == "stopped" {
 		return errors.New("VM must be running first")
 	}
-	_, err = client.MonitorCmd(vmr, "device_del net1")
+	_, err = client.MonitorCmd(vmr, "device_del net0")
 	if err != nil {
 		return err
 	}
-	_, err = client.MonitorCmd(vmr, "netdev_del net1")
+	_, err = client.MonitorCmd(vmr, "netdev_del net0")
 	if err != nil {
 		return err
 	}
